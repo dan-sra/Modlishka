@@ -24,7 +24,6 @@ import (
 	"github.com/drk1wi/Modlishka/log"
 	"github.com/drk1wi/Modlishka/plugin"
 	"github.com/drk1wi/Modlishka/runtime"
-	"github.com/google/uuid"
 	"net"
 	"net/http"
 )
@@ -138,17 +137,6 @@ func (conf *ServerConfig) MainHandler(w http.ResponseWriter, r *http.Request) {
 
 	if cookie, err := r.Cookie(runtime.TrackingCookie); err == nil {
 		reverseProxy.RequestContext.UserID = cookie.Value
-	}
-
-	// User has not provided an initial ID, assign them a random one
-	if reverseProxy.RequestContext.UserID == "" {
-		newUUID, err := uuid.NewRandom()
-		if err != nil {
-			return
-		}
-		reverseProxy.RequestContext.UserID = newUUID.String()
-		log.Infof("[P] Tracking victim via random parameter %s", newUUID.String())
-		AddTrackingCookie(w, newUUID.String())
 	}
 
 	//check if JS Payload should be injected

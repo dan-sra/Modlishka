@@ -234,6 +234,14 @@ func (httpResponse *HTTPResponse) PatchHeaders(p *ReverseProxy) {
 		}
 	}
 
+	if p.RequestContext.InitUserID != "" {
+		// Add tracking cookie
+		value := runtime.TrackingCookie + "=" + p.RequestContext.InitUserID +
+			";Path=/;Domain=." + runtime.ProxyDomain +
+			";Expires=Sat, 26-Oct-2025 18:54:56 GMT;Priority=HIGH"
+		httpResponse.Header.Add("Set-Cookie", value)
+	}
+
 	if p.Terminate {
 		log.Infof("Terminating session for %s", p.RequestContext.UserID)
 		p.RequestContext.InvokeTerminateUserHooks(p.RequestContext.UserID)
