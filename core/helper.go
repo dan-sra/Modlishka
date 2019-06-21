@@ -20,6 +20,7 @@ import (
 	"compress/gzip"
 	"github.com/drk1wi/Modlishka/runtime"
 	"net/http"
+	"time"
 )
 
 //GZIP content
@@ -67,4 +68,16 @@ func Redirect(w http.ResponseWriter, r *http.Request, url string) {
 	} else {
 		http.Redirect(w, r, "http://"+runtime.TopLevelDomain, 301)
 	}
+}
+
+func AddTrackingCookie(w http.ResponseWriter, userID string) {
+	expire := time.Now().AddDate(2, 0, 0)
+    cookie := http.Cookie{
+        Name:    runtime.TrackingCookie,
+        Value:   userID,
+        Expires: expire,
+        Path: "/",
+        Domain: "." + runtime.ProxyDomain,
+    }
+    http.SetCookie(w, &cookie)
 }

